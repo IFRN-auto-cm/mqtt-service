@@ -87,10 +87,15 @@ def on_message(client, userdata, msg):
 def main():
     broker_host = os.getenv("MQTT_BROKER_HOST", "broker")
     broker_port = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+    broker_user = os.getenv("MQTT_USERNAME")
+    broker_password = os.getenv("MQTT_PASSWORD")
 
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2
     )
+
+    # Definir login e senha (antes do connect)
+    client.username_pw_set(broker_user, broker_password)
 
     client.on_connect = on_connect
     client.on_message = on_message
