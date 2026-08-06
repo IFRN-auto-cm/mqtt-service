@@ -4,6 +4,7 @@ import os
 
 import paho.mqtt.client as mqtt
 import requests
+from mqtt_brokers import criar_cliente, conectar_com_broker
 
 
 API_URL = os.getenv(
@@ -14,7 +15,7 @@ API_URL = os.getenv(
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
 MQTT_TOPIC_STATUS = os.getenv("MQTT_TOPIC_STATUS")
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +33,7 @@ def extrair_atuador_do_topico(topico):
 
 def on_connect(client, userdata, flags, reason_code, properties=None):
     if reason_code == 0:
-        logger.info("Conectado ao broker MQTT")
+        logger.debug("Conectado ao broker MQTT")
         client.subscribe(MQTT_TOPIC_STATUS)
     else:
         logger.error(
@@ -85,29 +86,18 @@ def on_message(client, userdata, msg):
 
 
 def main():
-    broker_host = os.getenv("MQTT_BROKER_HOST", "broker")
-    broker_port = int(os.getenv("MQTT_BROKER_PORT", "1883"))
-    broker_user = os.getenv("MQTT_USERNAME")
-    broker_password = os.getenv("MQTT_PASSWORD")
-
-    client = mqtt.Client(
-        callback_api_version=mqtt.CallbackAPIVersion.VERSION2
-    )
-
-    # Definir login e senha (antes do connect)
-    client.username_pw_set(broker_user, broker_password)
-
+    client = criar_cliente( client_id="superar-status-consumer" )
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.connect(
-        broker_host,
-        broker_port,
-        keepalive=60
+    broker = conectar_com_broker(client)
+
+    logger.debug(
+        f"Conectado ao broker {broker.nome}: "
+        f"{broker.host}:{broker.port}"
     )
 
     client.loop_forever()
-
 
 if __name__ == "__main__":
     main()
