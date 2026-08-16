@@ -25,7 +25,7 @@ def brokers_configurados() -> list[Broker]:
         Broker(
             host=os.getenv("MQTT_BROKER_SECONDARY_HOST", "mqtt-broker"),
             port=int(os.getenv("MQTT_BROKER_SECONDARY_PORT", "1883")),
-            nome="local",
+            nome="secundário",
         ),
     ]
 
