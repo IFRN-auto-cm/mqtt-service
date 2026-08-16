@@ -172,44 +172,44 @@ def on_message(
 
 def iniciar_mqtt():
 
-    global mqtt_client
-    global mqtt_broker
+  global mqtt_client
+  global mqtt_broker
 
 
-    mqtt_client = criar_cliente(
-        client_id="superar-mqtt-service"
-    )
+  mqtt_client = criar_cliente(
+    client_id="superar-mqtt-service"
+  )
 
 
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_message = on_message
-    mqtt_client.on_disconnect = on_disconnect
+  mqtt_client.on_connect = on_connect
+  mqtt_client.on_message = on_message
+  mqtt_client.on_disconnect = on_disconnect
 
 
-    # conecta_com_broker() já implementa seu
-    # broker primário + fallback
+  # conecta_com_broker() já implementa seu
+  # broker primário + fallback
 
-    mqtt_broker = conectar_com_broker(
-        mqtt_client
-    )
-
-
-    logger.info(
-        "Broker MQTT selecionado: %s (%s:%s)",
-        mqtt_broker.nome,
-        mqtt_broker.host,
-        mqtt_broker.port
-    )
+  mqtt_broker = conectar_com_broker(
+    mqtt_client
+  )
 
 
-    # MUITO IMPORTANTE:
-    #
-    # loop_start() roda MQTT em outra thread.
-    #
-    # Não usamos loop_forever(), porque Flask
-    # precisa utilizar a thread principal.
+  logger.info(
+    "Broker MQTT selecionado: %s (%s:%s)",
+    mqtt_broker.nome,
+    mqtt_broker.host,
+    mqtt_broker.port
+  )
 
-    mqtt_client.loop_start()
+
+  # MUITO IMPORTANTE:
+  #
+  # loop_start() roda MQTT em outra thread.
+  #
+  # Não usamos loop_forever(), porque Flask
+  # precisa utilizar a thread principal.
+
+  mqtt_client.loop_start()
 
 
 # ============================================================
@@ -219,262 +219,240 @@ def iniciar_mqtt():
 @app.get("/health")
 def health():
 
-    conectado = (
-        mqtt_client is not None
-        and mqtt_client.is_connected()
+  conectado = (
+    mqtt_client is not None
+    and mqtt_client.is_connected()
+  )
+
+  return jsonify({
+    "status": "ok",
+    "mqtt_connected": conectado,
+    "broker": (
+      mqtt_broker.nome
+      if mqtt_broker
+      else None
+    )
+  })
+
+@app.post("/publish")
+def publicar():
+  dados = request.get_json(
+    silent=True
+  )
+
+  if not isinstance(dados, dict):
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "O corpo da requisição deve ser JSON"
+    }), 400
+
+
+  topic = dados.get("topic")
+  payload = dados.get("payload")
+
+  qos = dados.get(
+    "qos",
+    0
+  )
+
+  retain = dados.get(
+    "retain",
+    False
+  )
+
+
+  if not topic:
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "O campo 'topic' é obrigatório"
+    }), 400
+
+
+  if payload is None:
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "O campo 'payload' é obrigatório"
+    }), 400
+
+  if mqtt_client is None:
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "Cliente MQTT não inicializado"
+    }), 503
+
+
+  if not mqtt_client.is_connected():
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "MQTT não está conectado"
+    }), 503
+
+  try:
+    mensagem = json.dumps(
+      payload
+    )
+
+
+    resultado = mqtt_client.publish(
+      topic,
+      mensagem,
+      qos=qos,
+      retain=retain
+    )
+
+
+    # Aguarda confirmação do envio para o cliente Paho.
+    # Não significa que o ESP recebeu,
+    # apenas que a publicação foi processada
+    # pelo cliente MQTT.
+
+    resultado.wait_for_publish(
+      timeout=5
+    )
+
+    if resultado.rc != 0:
+      return jsonify({
+        "status": "erro",
+        "mensagem":
+          "Falha ao publicar no broker MQTT",
+        "codigo": resultado.rc
+      }), 503
+
+
+    logger.info(
+      "MQTT publicado: %s",
+      topic
     )
 
 
     return jsonify({
-        "status": "ok",
-        "mqtt_connected": conectado,
-        "broker": (
-            mqtt_broker.nome
-            if mqtt_broker
-            else None
-        )
+      "status": "ok",
+      "topic": topic
     })
 
-@app.post("/publish")
-def publicar():
 
-    dados = request.get_json(
-        silent=True
+  except Exception as erro:
+    logger.exception(
+      "Erro ao publicar mensagem MQTT"
     )
 
-
-    if not isinstance(dados, dict):
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "O corpo da requisição deve ser JSON"
-        }), 400
-
-
-    topic = dados.get("topic")
-    payload = dados.get("payload")
-
-    qos = dados.get(
-        "qos",
-        0
-    )
-
-    retain = dados.get(
-        "retain",
-        False
-    )
-
-
-    if not topic:
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "O campo 'topic' é obrigatório"
-        }), 400
-
-
-    if payload is None:
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "O campo 'payload' é obrigatório"
-        }), 400
-
-
-    if mqtt_client is None:
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "Cliente MQTT não inicializado"
-        }), 503
-
-
-    if not mqtt_client.is_connected():
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "MQTT não está conectado"
-        }), 503
-
-
-    try:
-
-        mensagem = json.dumps(
-            payload
-        )
-
-
-        resultado = mqtt_client.publish(
-            topic,
-            mensagem,
-            qos=qos,
-            retain=retain
-        )
-
-
-        # Aguarda confirmação do envio para o cliente Paho.
-        # Não significa que o ESP recebeu,
-        # apenas que a publicação foi processada
-        # pelo cliente MQTT.
-
-        resultado.wait_for_publish(
-            timeout=5
-        )
-
-
-        if resultado.rc != 0:
-
-            return jsonify({
-                "status": "erro",
-                "mensagem":
-                    "Falha ao publicar no broker MQTT",
-                "codigo": resultado.rc
-            }), 503
-
-
-        logger.info(
-            "MQTT publicado: %s",
-            topic
-        )
-
-
-        return jsonify({
-            "status": "ok",
-            "topic": topic
-        })
-
-
-    except Exception as erro:
-
-        logger.exception(
-            "Erro ao publicar mensagem MQTT"
-        )
-
-        return jsonify({
-            "status": "erro",
-            "mensagem": str(erro)
-        }), 500
+    return jsonify({
+      "status": "erro",
+      "mensagem": str(erro)
+    }), 500
 
 @app.post("/ar/comando")
 def publicar_comando_ar():
 
-    dados = request.get_json(
-        silent=True
+  dados = request.get_json(
+    silent=True
+  )
+
+  if not isinstance(dados, dict):
+
+    return jsonify({
+      "status": "erro",
+      "mensagem": "JSON inválido"
+    }), 400
+
+  atuador = dados.get(
+    "atuador"
+  )
+
+  payload = dados.get(
+    "payload"
+  )
+
+  if not atuador:
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "O campo 'atuador' é obrigatório"
+    }), 400
+
+
+  if payload is None:
+
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "O campo 'payload' é obrigatório"
+    }), 400
+
+
+  if mqtt_client is None:
+
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "Cliente MQTT não inicializado"
+    }), 503
+
+
+  if not mqtt_client.is_connected():
+
+    return jsonify({
+      "status": "erro",
+      "mensagem":
+        "Broker MQTT não conectado"
+    }), 503
+
+
+  try:
+    # O conhecimento sobre a estrutura
+    # dos tópicos fica SOMENTE neste serviço.
+
+    topico = (
+      f"cm/ar/{atuador}/cmd"
     )
 
 
-    if not isinstance(dados, dict):
-
-        return jsonify({
-            "status": "erro",
-            "mensagem": "JSON inválido"
-        }), 400
-
-
-    atuador = dados.get(
-        "atuador"
-    )
-
-    payload = dados.get(
-        "payload"
+    resultado = mqtt_client.publish(
+      topico,
+      json.dumps(payload)
     )
 
 
-    if not atuador:
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "O campo 'atuador' é obrigatório"
-        }), 400
+    resultado.wait_for_publish(
+      timeout=5
+    )
 
 
-    if payload is None:
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "O campo 'payload' é obrigatório"
-        }), 400
-
-
-    if mqtt_client is None:
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "Cliente MQTT não inicializado"
-        }), 503
+    if resultado.rc != 0:
+      return jsonify({
+        "status": "erro",
+        "mensagem":
+          "Falha na publicação MQTT",
+        "codigo": resultado.rc
+      }), 503
 
 
-    if not mqtt_client.is_connected():
-
-        return jsonify({
-            "status": "erro",
-            "mensagem":
-                "Broker MQTT não conectado"
-        }), 503
+    logger.info(
+      "Comando publicado para %s",
+      atuador
+    )
 
 
-    try:
+    return jsonify({
+      "status": "ok",
+      "atuador": atuador,
+      "topic": topico
+    })
 
-        # O conhecimento sobre a estrutura
-        # dos tópicos fica SOMENTE neste serviço.
+  except Exception as erro:
+    logger.exception(
+      "Erro ao publicar comando MQTT"
+    )
 
-        topico = (
-            f"cm/ar/{atuador}/cmd"
-        )
-
-
-        resultado = mqtt_client.publish(
-            topico,
-            json.dumps(payload)
-        )
-
-
-        resultado.wait_for_publish(
-            timeout=5
-        )
-
-
-        if resultado.rc != 0:
-
-            return jsonify({
-                "status": "erro",
-                "mensagem":
-                    "Falha na publicação MQTT",
-                "codigo": resultado.rc
-            }), 503
-
-
-        logger.info(
-            "Comando publicado para %s",
-            atuador
-        )
-
-
-        return jsonify({
-            "status": "ok",
-            "atuador": atuador,
-            "topic": topico
-        })
-
-
-    except Exception as erro:
-
-        logger.exception(
-            "Erro ao publicar comando MQTT"
-        )
-
-        return jsonify({
-            "status": "erro",
-            "mensagem": str(erro)
-        }), 500
+    return jsonify({
+      "status": "erro",
+      "mensagem": str(erro)
+    }), 500
 
 
 # ============================================================
@@ -482,12 +460,11 @@ def publicar_comando_ar():
 # ============================================================
 
 if __name__ == "__main__":
+  iniciar_mqtt()
 
-    iniciar_mqtt()
-
-    app.run(
-        host="0.0.0.0",
-        port=5001,
-        debug=False,
-        threaded=True
-    )
+  app.run(
+    host="0.0.0.0",
+    port=5002,
+    debug=False,
+    threaded=True
+  )
