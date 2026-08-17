@@ -13,7 +13,8 @@ API_URL = os.getenv(
 )
 
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
-MQTT_TOPIC_STATUS = os.getenv("MQTT_TOPIC_STATUS", "cm/ar/+/status")
+MQTT_TOPIC_STATUS = os.getenv("MQTT_TOPIC_STATUS")
+MQTT_TOPIC_AVAILABILITY = os.getenv("MQTT_TOPIC_AVAILABILITY")
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -32,138 +33,207 @@ def extrair_atuador_do_topico(topico: str):
 
     return partes[2]
 
+def extrair_tipo_topico(topico: str):
 
-# ============================================================
-# Callbacks MQTT
-# ============================================================
+    partes = topico.split("/")
 
-def on_connect(
-    client,
-    userdata,
-    flags,
-    reason_code,
-    properties=None
-):
+    if len(partes) < 4:
+        return None
 
-    if reason_code == 0:
+    return partes[3]
 
-        logger.info(
-            "Conectado ao broker MQTT"
-        )
-
-        client.subscribe(
-            MQTT_TOPIC_STATUS
-        )
-
-        logger.info(
-            "Inscrito no tópico: %s",
-            MQTT_TOPIC_STATUS
-        )
-
-    else:
-
-        logger.error(
-            "Erro ao conectar ao MQTT: %s",
-            reason_code
-        )
-
-def on_disconnect(
-    client,
-    userdata,
-    disconnect_flags=None,
-    reason_code=None,
-    properties=None
-):
-
-    logger.warning(
-        "Cliente MQTT desconectado. reason_code=%s",
-        reason_code
-    )
-
-def on_message(
-    client,
-    userdata,
-    msg
-):
+def processar_disponibilidade(msg):
 
     try:
-
-        payload = json.loads(
-            msg.payload.decode("utf-8")
+        atuador = extrair_atuador_do_topico(
+            msg.topic
         )
 
-        if not isinstance(payload, dict):
+        disponibilidade = (
+            msg.payload
+            .decode("utf-8")
+            .strip()
+            .lower()
+        )
 
-            raise ValueError(
-                "O payload MQTT não é um objeto JSON"
+        if disponibilidade not in (
+            "online",
+            "offline"
+        ):
+
+            logger.warning(
+                "Disponibilidade inválida "
+                "recebida de %s: %s",
+                atuador,
+                disponibilidade
             )
 
+            return
 
-        # Acrescenta informações que vieram do MQTT
+        dados = {
 
-        payload["atuador"] = (
-            extrair_atuador_do_topico(
+            "atuador":
+                atuador,
+
+            "availability":
+                disponibilidade,
+
+            "online":
+                disponibilidade == "online",
+
+            "topico":
                 msg.topic
-            )
-        )
-
-        payload["topico"] = msg.topic
-
-
-        logger.debug(
-            "Mensagem MQTT recebida: tópico=%s payload=%s",
-            msg.topic,
-            payload
-        )
-
-
-        # ----------------------------------------------------
-        # Envia status para a API
-        # ----------------------------------------------------
+        }
 
         resposta = requests.post(
-
-            f"{API_URL}/internal/mqtt/status",
-
-            json=payload,
-
+            f"{API_URL}/internal/mqtt/availability",
+            json=dados,
             headers={
                 "X-Internal-Token":
                     INTERNAL_API_TOKEN or ""
             },
-
-            timeout=10
+            timeout=5
         )
+
 
         resposta.raise_for_status()
 
 
         logger.info(
-            "Status MQTT enviado para API"
-        )
-
-
-    except json.JSONDecodeError:
-
-        logger.exception(
-            "Payload MQTT inválido: %r",
-            msg.payload
+            "Disponibilidade %s: %s",
+            atuador,
+            disponibilidade
         )
 
 
     except requests.RequestException:
 
         logger.exception(
-            "Não foi possível enviar "
-            "o status MQTT para a API"
+            "Erro ao enviar disponibilidade "
+            "para a API"
         )
 
+# ============================================================
+# Callbacks MQTT
+# ============================================================
 
-    except Exception:
+def on_connect(
+  client,
+  userdata,
+  flags,
+  reason_code,
+  properties=None
+):
+  if reason_code == 0:
+    logger.info("Conectado ao broker MQTT")
 
-        logger.exception(
-            "Erro ao processar mensagem MQTT"
+    client.subscribe( MQTT_TOPIC_STATUS )
+
+    client.subscribe( MQTT_TOPIC_AVAILABILITY )
+
+    logger.info(
+      "Inscrito nos tópicos: %s, %s",
+      MQTT_TOPIC_STATUS,
+      MQTT_TOPIC_AVAILABILITY
+    )
+  else:
+    logger.error(
+      "Erro ao conectar ao MQTT: %s",
+      reason_code
+    )
+
+def on_disconnect(
+  client,
+  userdata,
+  disconnect_flags=None,
+  reason_code=None,
+  properties=None
+):
+
+  logger.warning(
+    "Cliente MQTT desconectado. reason_code=%s",
+    reason_code
+  )
+
+def on_message(
+  client,
+  userdata,
+  msg
+):
+
+  try:
+    tipo = extrair_tipo_topico( msg.topic )
+
+    if tipo == "available":
+      processar_disponibilidade(msg)
+
+    else:
+      payload = json.loads(
+        msg.payload.decode("utf-8")
+      )
+
+      if not isinstance(payload, dict):
+        raise ValueError(
+          "O payload MQTT não é um objeto JSON"
         )
+
+      # Acrescenta informações que vieram do MQTT
+      payload["atuador"] = (
+          extrair_atuador_do_topico(
+              msg.topic
+          )
+      )
+
+      payload["topico"] = msg.topic
+
+      logger.debug(
+        "Mensagem MQTT recebida: tópico=%s payload=%s",
+        msg.topic,
+        payload
+      )
+
+      # ----------------------------------------------------
+      # Envia status para a API
+      # ----------------------------------------------------
+
+      resposta = requests.post(
+
+        f"{API_URL}/internal/mqtt/status",
+
+        json=payload,
+
+        headers={
+          "X-Internal-Token":
+            INTERNAL_API_TOKEN or ""
+        },
+
+        timeout=10
+      )
+
+      resposta.raise_for_status()
+
+      logger.info(
+        "Status MQTT enviado para API"
+      )
+
+  except json.JSONDecodeError:
+    logger.exception(
+      "Payload MQTT inválido: %r",
+      msg.payload
+    )
+
+
+  except requests.RequestException:
+    logger.exception(
+      "Não foi possível enviar "
+      "o status MQTT para a API"
+    )
+
+
+  except Exception:
+    logger.exception(
+      "Erro ao processar mensagem MQTT"
+    )
 
 
 # ============================================================
