@@ -18,13 +18,13 @@ class Broker:
 def brokers_configurados() -> list[Broker]:
     return [
         Broker(
-            host=os.getenv("MQTT_BROKER_PRIMARY_HOST", "10.57.0.10"),
-            port=int(os.getenv("MQTT_BROKER_PRIMARY_PORT", "1883")),
+            host=os.getenv("MQTT_BROKER_PRIMARY_HOST"),
+            port=int(os.getenv("MQTT_BROKER_PRIMARY_PORT")),
             nome="primário",
         ),
         Broker(
-            host=os.getenv("MQTT_BROKER_SECONDARY_HOST", "mqtt-broker"),
-            port=int(os.getenv("MQTT_BROKER_SECONDARY_PORT", "1883")),
+            host=os.getenv("MQTT_BROKER_SECONDARY_HOST"),
+            port=int(os.getenv("MQTT_BROKER_SECONDARY_PORT")),
             nome="secundário",
         ),
     ]
