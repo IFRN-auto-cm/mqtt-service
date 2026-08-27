@@ -18,13 +18,13 @@ class Broker:
 def brokers_configurados() -> list[Broker]:
     return [
         Broker(
-            host=os.getenv("MQTT_BROKER_PRIMARY_HOST"),
-            port=int(os.getenv("MQTT_BROKER_PRIMARY_PORT")),
+            host=os.getenv("MQTT_BROKER_PRIMARY_HOST", "10.57.0.10"),
+            port=int(os.getenv("MQTT_BROKER_PRIMARY_PORT", "1883")),
             nome="primário",
         ),
         Broker(
-            host=os.getenv("MQTT_BROKER_SECONDARY_HOST"),
-            port=int(os.getenv("MQTT_BROKER_SECONDARY_PORT")),
+            host=os.getenv("MQTT_BROKER_SECONDARY_HOST", "mqtt-broker"),
+            port=int(os.getenv("MQTT_BROKER_SECONDARY_PORT", "1883")),
             nome="secundário",
         ),
     ]
@@ -34,7 +34,7 @@ def criar_cliente(client_id: str = "") -> mqtt.Client:
     try:
         cliente = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-            client_id=client_id,
+            client_id=os.getenv("MQTT_CLIENT_ID"),
         )
     except (AttributeError, TypeError):
         cliente = mqtt.Client(client_id=client_id)
