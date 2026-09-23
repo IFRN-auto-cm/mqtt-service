@@ -16,7 +16,10 @@ INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
 MQTT_TOPIC_STATUS = os.getenv("MQTT_TOPIC_STATUS")
 MQTT_TOPIC_AVAILABILITY = os.getenv("MQTT_TOPIC_AVAILABILITY")
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
+logging.getLogger().setLevel(logging.INFO)
+logging.getLogger(__name__).setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -212,7 +215,7 @@ def on_message(
 
       resposta.raise_for_status()
 
-      logger.info(
+      logger.debug(
         "Status MQTT enviado para API"
       )
 
@@ -264,7 +267,7 @@ def iniciar_mqtt():
   )
 
 
-  logger.info(
+  logger.debug(
     "Broker MQTT selecionado: %s (%s:%s)",
     mqtt_broker.nome,
     mqtt_broker.host,
@@ -394,7 +397,7 @@ def publicar():
       }), 503
 
 
-    logger.info(
+    logger.debug(
       "MQTT publicado: %s",
       topic
     )
