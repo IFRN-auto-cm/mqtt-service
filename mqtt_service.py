@@ -16,9 +16,9 @@ INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
 MQTT_TOPIC_STATUS = os.getenv("MQTT_TOPIC_STATUS")
 MQTT_TOPIC_AVAILABILITY = os.getenv("MQTT_TOPIC_AVAILABILITY")
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger().setLevel(logging.INFO)
-logging.getLogger(__name__).setLevel(logging.INFO)
+logging.basicConfig(level=logging.ERROR)
+logging.getLogger().setLevel(logging.ERROR)
+logging.getLogger(__name__).setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
