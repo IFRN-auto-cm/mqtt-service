@@ -108,13 +108,18 @@ def processar_disponibilidade(msg):
             disponibilidade
         )
 
-
-    except requests.RequestException:
-
-        logger.exception(
-            "Erro ao enviar disponibilidade "
-            "para a API"
-        )
+    except requests.RequestException as erro:
+      if erro.response.status_code == 404:
+          logger.info(
+              "Dispositivo não cadastrado na banco: %s",
+              dados
+          )
+      else:
+          logger.exception(
+              "Não foi possível enviar " "o status MQTT para a API" +
+              "API retornou erro HTTP %s",
+              erro.response.status_code
+          )
 
 # ============================================================
 # Callbacks MQTT
@@ -226,11 +231,18 @@ def on_message(
     )
 
 
-  except requests.RequestException:
-    logger.exception(
-      "Não foi possível enviar "
-      "o status MQTT para a API"
-    )
+  except requests.RequestException as erro:
+    if erro.response.status_code == 404:
+        logger.info(
+            "Dispositivo não cadastrado no banco: %s",
+            payload
+        )
+    else:
+        logger.exception(
+            "Não foi possível enviar " "o status MQTT para a API" +
+            "API retornou erro HTTP %s",
+            erro.response.status_code
+        )
 
 
   except Exception:
