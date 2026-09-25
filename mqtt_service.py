@@ -16,7 +16,10 @@ INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
 MQTT_TOPIC_STATUS = os.getenv("MQTT_TOPIC_STATUS")
 MQTT_TOPIC_AVAILABILITY = os.getenv("MQTT_TOPIC_AVAILABILITY")
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
+logging.getLogger().setLevel(logging.ERROR)
+logging.getLogger(__name__).setLevel(logging.ERROR)
+
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -105,13 +108,18 @@ def processar_disponibilidade(msg):
             disponibilidade
         )
 
-
-    except requests.RequestException:
-
-        logger.exception(
-            "Erro ao enviar disponibilidade "
-            "para a API"
-        )
+    except requests.RequestException as erro:
+      if erro.response.status_code == 404:
+          logger.info(
+              "Dispositivo não cadastrado na banco: %s",
+              dados
+          )
+      else:
+          logger.exception(
+              "Não foi possível enviar " "o status MQTT para a API" +
+              "API retornou erro HTTP %s",
+              erro.response.status_code
+          )
 
 # ============================================================
 # Callbacks MQTT
@@ -212,7 +220,7 @@ def on_message(
 
       resposta.raise_for_status()
 
-      logger.info(
+      logger.debug(
         "Status MQTT enviado para API"
       )
 
@@ -223,11 +231,18 @@ def on_message(
     )
 
 
-  except requests.RequestException:
-    logger.exception(
-      "Não foi possível enviar "
-      "o status MQTT para a API"
-    )
+  except requests.RequestException as erro:
+    if erro.response.status_code == 404:
+        logger.info(
+            "Dispositivo não cadastrado no banco: %s",
+            payload
+        )
+    else:
+        logger.exception(
+            "Não foi possível enviar " "o status MQTT para a API" +
+            "API retornou erro HTTP %s",
+            erro.response.status_code
+        )
 
 
   except Exception:
@@ -264,7 +279,7 @@ def iniciar_mqtt():
   )
 
 
-  logger.info(
+  logger.debug(
     "Broker MQTT selecionado: %s (%s:%s)",
     mqtt_broker.nome,
     mqtt_broker.host,
@@ -394,7 +409,7 @@ def publicar():
       }), 503
 
 
-    logger.info(
+    logger.debug(
       "MQTT publicado: %s",
       topic
     )
